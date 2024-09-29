@@ -1,4 +1,6 @@
 import time
+from xmlrpc.client import DateTime
+
 import requests
 from bs4 import BeautifulSoup
 from playwright.sync_api import sync_playwright
@@ -32,13 +34,24 @@ def fetch_apartment_data():
     with sync_playwright() as p:
         browser = p.chromium.launch(headless=True)
         page = browser.new_page()
-        page.goto(APP_URL)
+        # Set the timeout to handle longer page loading times
+        page.goto(APP_URL, timeout=30000)  # 30 seconds timeout
 
-        # Wait until there are no ongoing network requests for at least 500 ms
-        page.wait_for_load_state('networkidle', timeout=15000)
+        # Wait until the network is idle, meaning no more network requests are being made
+        page.wait_for_load_state('networkidle', timeout=30000)  # Adjust timeout if needed
 
-        # Optionally, wait for a specific element or text that confirms the data is fully loaded
-        page.wait_for_selector("#js-locals-table div, #js-locals-table span", timeout=15000)
+        # Optional: Add a sleep to allow extra time for JavaScript to load content after network idle
+        time.sleep(5)  # Sleep for 5 seconds to give the page time to render content
+
+        # Check if content is loaded inside the div
+        try:
+            # Optionally, wait for a specific element or text that confirms the data is fully loaded
+            page.wait_for_selector("#js-locals-table div, #js-locals-table span", timeout=30000)
+        except Exception as e:
+            print(f"No appartments in selected filter. Selector wait failed: {e}")
+            send_telegram_message("Error: Data fetching failed.  No data available by filter", silent=True)
+            browser.close()
+            return "None"
 
         # Extract the full HTML content of the target <div>
         content = page.inner_html("#js-locals-table")
@@ -76,4 +89,4 @@ def check_for_changes():
 if __name__ == "__main__":
     while True:
         check_for_changes()
-        time.sleep(3600)  # Check every hour
+        time.sleep(900)  # Check every 15 min (900) / or hour (3600)
